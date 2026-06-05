@@ -93,6 +93,112 @@ header p {
   resize: vertical;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+
+.checkbox-label input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #93c5fd;
+}
+
+.field-note {
+  display: block;
+  margin-top: 0.45rem;
+  color: #cbd5ff;
+  font-size: 0.92rem;
+}
+
+.dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.dropdown-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  color: #f8fbff;
+  padding: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.dropdown-toggle:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.dropdown-toggle::after {
+  content: '\25BE';
+  font-size: 0.9rem;
+  color: #cbd5ff;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+
+.dropdown-toggle[aria-expanded='true']::after,
+.dropdown-toggle.open::after {
+  transform: rotate(-180deg);
+}
+
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: 100%;
+  background: rgba(12, 19, 53, 0.96);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  padding: 0.75rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+  z-index: 10;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.dropdown-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dropdown-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 0.85rem;
+  border-radius: 14px;
+  cursor: pointer;
+  color: #f8fbff;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.dropdown-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(1px);
+}
+
+.dropdown-option input {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: #93c5fd;
+}
+
 .file-preview {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);

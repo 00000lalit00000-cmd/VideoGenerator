@@ -1,7 +1,36 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 const API_BASE = 'http://localhost:4000';
+
+const VIDEO_OPTION_CHOICES = [
+  { value: 'fadeTransitions', label: 'Fade transitions' },
+  { value: 'slideMotion', label: 'Slide motion' },
+  { value: 'zoomBurst', label: 'Zoom burst' },
+  { value: 'flipSpin', label: 'Flip spin' },
+  { value: 'blurZoom', label: 'Blur zoom' },
+  { value: 'glowPulse', label: 'Glow pulse' },
+  { value: 'strobeFlash', label: 'Strobe flash' },
+  { value: 'colorShift', label: 'Color shift' },
+  { value: 'shakePulse', label: 'Shake pulse' },
+  { value: 'curtainReveal', label: 'Curtain reveal' },
+  { value: 'sparkleTrail', label: 'Sparkle trail' },
+  { value: 'neonGlow', label: 'Neon glow' },
+];
+
+const ANIMATION_EFFECT_CHOICES = [
+  { value: 'fade', label: 'Fade' },
+  { value: 'zoom', label: 'Zoom' },
+  { value: 'slide', label: 'Slide' },
+  { value: 'flip', label: 'Flip' },
+  { value: 'bounce', label: 'Bounce' },
+  { value: 'pan', label: 'Pan' },
+  { value: 'blur', label: 'Blur' },
+  { value: 'glitch', label: 'Glitch' },
+  { value: 'rotate', label: 'Rotate' },
+  { value: 'wipe', label: 'Wipe' },
+  { value: 'sparkle', label: 'Sparkle' },
+];
 
 function formatFileSize(bytes) {
   return bytes < 1024
@@ -19,9 +48,15 @@ export default function App() {
   const [error, setError] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
   const [videoType, setVideoType] = useState('desktop');
+  const [animationEffects, setAnimationEffects] = useState([]);
+  const [animationOpen, setAnimationOpen] = useState(false);
+  const [videoOptions, setVideoOptions] = useState([]);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
+  const optionsRef = useRef(null);
+  const animationRef = useRef(null);
 
   const handleImageChange = (event) => {
     setDownloadUrl('');
@@ -77,6 +112,47 @@ export default function App() {
     }
   };
 
+  const toggleAnimationEffect = (value) => {
+    setAnimationEffects((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
+    );
+  };
+
+  const toggleSelectAllAnimationEffects = () => {
+    if (animationEffects.length === ANIMATION_EFFECT_CHOICES.length) {
+      setAnimationEffects([]);
+    } else {
+      setAnimationEffects(ANIMATION_EFFECT_CHOICES.map((option) => option.value));
+    }
+  };
+
+  const toggleVideoOption = (value) => {
+    setVideoOptions((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
+    );
+  };
+
+  const toggleOptionsOpen = () => {
+    setOptionsOpen((open) => !open);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const clickedInsideOptions = optionsRef.current && optionsRef.current.contains(event.target);
+      const clickedInsideAnimation = animationRef.current && animationRef.current.contains(event.target);
+
+      if (!clickedInsideOptions) {
+        setOptionsOpen(false);
+      }
+      if (!clickedInsideAnimation) {
+        setAnimationOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setStatus('Preparing upload...');
@@ -103,6 +179,8 @@ export default function App() {
     formData.append('audio', audio);
     formData.append('script', script);
     formData.append('videoType', videoType);
+    formData.append('animationEffects', JSON.stringify(animationEffects));
+    formData.append('videoOptions', JSON.stringify(videoOptions));
 
     try {
       setStatus('Uploading files and generating video...');
@@ -187,6 +265,92 @@ export default function App() {
               <option value="real">Real (1080x1920)</option>
             </select>
           </label>
+
+          <label className="field-label">
+            Choose animation effect:
+            <div className="dropdown" ref={animationRef}>
+              <button
+                type="button"
+                className={`dropdown-toggle${animationOpen ? ' open' : ''}`}
+                aria-expanded={animationOpen}
+                onClick={() => setAnimationOpen((open) => !open)}
+                disabled={isGenerating}
+              >
+                {animationEffects.length > 0
+                  ? `${animationEffects.length} effect${animationEffects.length > 1 ? 's' : ''} selected`
+                  : 'Choose animation effects'}
+              </button>
+
+              {animationOpen && (
+                <div className="dropdown-panel">
+                  <label className="dropdown-option select-all">
+                    <input
+                      type="checkbox"
+                      checked={animationEffects.length === ANIMATION_EFFECT_CHOICES.length}
+                      onChange={toggleSelectAllAnimationEffects}
+                      disabled={isGenerating}
+                    />
+                    Select all animation effects
+                  </label>
+                  {ANIMATION_EFFECT_CHOICES.map((option) => (
+                    <label key={option.value} className="dropdown-option">
+                      <input
+                        type="checkbox"
+                        checked={animationEffects.includes(option.value)}
+                        onChange={() => toggleAnimationEffect(option.value)}
+                        disabled={isGenerating}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </label>
+
+          {animationEffects.length > 0 && (
+            <div className="file-preview">
+              <strong>Selected animation effects:</strong> {ANIMATION_EFFECT_CHOICES.filter((option) => animationEffects.includes(option.value)).map((option) => option.label).join(', ')}
+            </div>
+          )}
+
+          <label className="field-label">
+            Apply video options:
+            <div className="dropdown" ref={optionsRef}>
+              <button
+                type="button"
+                className={`dropdown-toggle${optionsOpen ? ' open' : ''}`}
+                aria-expanded={optionsOpen}
+                onClick={toggleOptionsOpen}
+                disabled={isGenerating}
+              >
+                {videoOptions.length > 0
+                  ? `${videoOptions.length} option${videoOptions.length > 1 ? 's' : ''} selected`
+                  : 'Choose options'}
+              </button>
+              {optionsOpen && (
+                <div className="dropdown-panel">
+                  {VIDEO_OPTION_CHOICES.map((option) => (
+                    <label key={option.value} className="dropdown-option">
+                      <input
+                        type="checkbox"
+                        checked={videoOptions.includes(option.value)}
+                        onChange={() => toggleVideoOption(option.value)}
+                        disabled={isGenerating}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </label>
+
+          {videoOptions.length > 0 && (
+            <div className="file-preview">
+              <strong>Selected options:</strong> {VIDEO_OPTION_CHOICES.filter((option) => videoOptions.includes(option.value)).map((option) => option.label).join(', ')}
+            </div>
+          )}
 
           <label className="field-label">
             Optional script for subtitles:

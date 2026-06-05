@@ -68,7 +68,26 @@ async function getAudioDuration(audioPath) {
   }
 }
 
-async function createSlideshowVideo(images, imageDuration, outputVideoPath, dimensions) {
+function getXfadeTransition(effect) {
+  const transitionMap = {
+    fadeTransitions: 'fade',
+    slideMotion: 'slideleft',
+    zoomBurst: 'zoom',
+    flipSpin: 'circle',
+    blurZoom: 'circlecrop',
+    glowPulse: 'glow',
+    strobeFlash: 'fadeblack',
+    colorShift: 'distance',
+    shakePulse: 'pushright',
+    curtainReveal: 'wipeleft',
+    sparkleTrail: 'slideup',
+    neonGlow: 'radial'
+  };
+
+  return transitionMap[effect] || 'fade';
+}
+
+async function createSlideshowVideo(images, imageDuration, outputVideoPath, dimensions, animationEffect = 'none') {
   const args = ['-y'];
   const { width, height } = dimensions;
 
@@ -82,8 +101,26 @@ async function createSlideshowVideo(images, imageDuration, outputVideoPath, dime
     })
     .join(';');
 
-  const inputLabels = images.map((_, index) => `[v${index}]`).join('');
-  const filterComplex = `${videoFilters};${inputLabels}concat=n=${images.length}:v=1:a=0,format=yuv420p[v]`;
+  let filterComplex;
+  if (images.length === 1 || animationEffect === 'none') {
+    const inputLabels = images.map((_, index) => `[v${index}]`).join('');
+    filterComplex = `${videoFilters};${inputLabels}concat=n=${images.length}:v=1:a=0,format=yuv420p[v]`;
+  } else {
+    const transition = getXfadeTransition(animationEffect);
+    const xfadeDuration = Math.min(0.8, imageDuration / 2);
+    const filterParts = [];
+    let currentLabel = `[v0]`;
+
+    for (let index = 1; index < images.length; index += 1) {
+      const nextLabel = `[v${index}]`;
+      const outputLabel = `[x${index}]`;
+      const offset = (index * imageDuration) - (index * xfadeDuration);
+      filterParts.push(`${currentLabel}${nextLabel}xfade=transition=${transition}:duration=${xfadeDuration}:offset=${offset}${outputLabel}`);
+      currentLabel = outputLabel;
+    }
+
+    filterComplex = `${videoFilters};${filterParts.join(';')};${currentLabel}format=yuv420p[v]`;
+  }
 
   args.push(
     '-filter_complex', filterComplex,
@@ -156,6 +193,23 @@ app.post('/api/render', async (req, res) => {
       const images = (req.files.images || []).map((file) => file.path);
       const audioFile = req.files.audio?.[0];
       const script = (req.body.script || '').toString().trim();
+      let animationEffects = [];
+      if (req.body.animationEffects) {
+        try {
+          animationEffects = JSON.parse(req.body.animationEffects);
+        } catch (parseError) {
+          animationEffects = Array.isArray(req.body.animationEffects)
+            ? req.body.animationEffects
+            : [req.body.animationEffects];
+        }
+      }
+      const animationEffect = animationEffects.length ? String(animationEffects[0]) : 'none';
+      let videoOptions = [];
+      try {
+        videoOptions = req.body.videoOptions ? JSON.parse(req.body.videoOptions) : [];
+      } catch (parseError) {
+        videoOptions = [];
+      }
 
       if (!images.length) {
         return res.status(400).json({ error: 'Please upload at least one image.' });
@@ -174,7 +228,7 @@ app.post('/api/render', async (req, res) => {
       const finalFilename = `video-${videoType}-${now}.mp4`;
       const finalPath = path.join(outputDir, finalFilename);
 
-      await createSlideshowVideo(images, imageDuration, slideshowPath, dimensions);
+      await createSlideshowVideo(images, imageDuration, slideshowPath, dimensions, animationEffect);
 
       let subtitlePath = null;
       if (script) {
