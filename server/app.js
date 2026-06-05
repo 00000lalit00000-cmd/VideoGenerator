@@ -70,18 +70,17 @@ async function getAudioDuration(audioPath) {
 
 function getXfadeTransition(effect) {
   const transitionMap = {
-    fadeTransitions: 'fade',
-    slideMotion: 'slideleft',
-    zoomBurst: 'zoom',
-    flipSpin: 'circle',
-    blurZoom: 'circlecrop',
-    glowPulse: 'glow',
-    strobeFlash: 'fadeblack',
-    colorShift: 'distance',
-    shakePulse: 'pushright',
-    curtainReveal: 'wipeleft',
-    sparkleTrail: 'slideup',
-    neonGlow: 'radial'
+    fade: 'fade',
+    zoom: 'zoomin',
+    slide: 'slideleft',
+    flip: 'circlecrop',
+    bounce: 'squeeze',
+    pan: 'slideup',
+    blur: 'pixelize',
+    glitch: 'dissolve',
+    rotate: 'circlecrop',
+    wipe: 'wipeleft',
+    sparkle: 'blend',
   };
 
   return transitionMap[effect] || 'fade';
@@ -111,6 +110,8 @@ async function createSlideshowVideo(images, imageDuration, outputVideoPath, dime
     const filterParts = [];
     let currentLabel = `[v0]`;
 
+    console.log(`Creating slideshow with animation effect: ${animationEffect} (transition: ${transition})`);
+
     for (let index = 1; index < images.length; index += 1) {
       const nextLabel = `[v${index}]`;
       const outputLabel = `[x${index}]`;
@@ -122,6 +123,8 @@ async function createSlideshowVideo(images, imageDuration, outputVideoPath, dime
     filterComplex = `${videoFilters};${filterParts.join(';')};${currentLabel}format=yuv420p[v]`;
   }
 
+  console.log(`FFmpeg filter complex: ${filterComplex}`);
+
   args.push(
     '-filter_complex', filterComplex,
     '-map', '[v]',
@@ -131,6 +134,7 @@ async function createSlideshowVideo(images, imageDuration, outputVideoPath, dime
     outputVideoPath
   );
 
+  console.log(`Executing FFmpeg with ${images.length} images, animation: ${animationEffect}`);
   await spawnAsync(resolveExecutable('ffmpeg'), args);
 }
 
@@ -204,6 +208,7 @@ app.post('/api/render', async (req, res) => {
         }
       }
       const animationEffect = animationEffects.length ? String(animationEffects[0]) : 'none';
+      console.log(`Received animationEffects: ${JSON.stringify(animationEffects)}, using: ${animationEffect}`);
       let videoOptions = [];
       try {
         videoOptions = req.body.videoOptions ? JSON.parse(req.body.videoOptions) : [];
