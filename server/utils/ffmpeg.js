@@ -1,9 +1,12 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const ffmpegStatic = require('ffmpeg-static');
+const ffprobeStatic = require('ffprobe-static');
 
 function resolveExecutable(name) {
   const envPath = process.env.FFMPEG_PATH || process.env.FFMPEG_BIN_DIR || process.env.FFMPEG_HOME;
+  const staticPath = name === 'ffmpeg' ? ffmpegStatic : ffprobeStatic.path || ffprobeStatic;
   const executableName = `${name}${process.platform === 'win32' ? '.exe' : ''}`;
 
   if (envPath) {
@@ -23,24 +26,41 @@ function resolveExecutable(name) {
     }
   }
 
+  if (staticPath) {
+    return staticPath;
+  }
+
   return executableName;
 }
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, options);
-    let stdout = '';
-    let stderr = '';
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    let stdoutSize = 0;
+    let stderrSize = 0;
+    const maxCapture = 128 * 1024; // capture up to 128 KB
 
     if (child.stdout) {
       child.stdout.on('data', (chunk) => {
-        stdout += chunk.toString();
+        const buffer = Buffer.from(chunk);
+        if (stdoutSize < maxCapture) {
+          const slice = buffer.slice(0, maxCapture - stdoutSize);
+          stdoutChunks.push(slice);
+          stdoutSize += slice.length;
+        }
       });
     }
 
     if (child.stderr) {
       child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
+        const buffer = Buffer.from(chunk);
+        if (stderrSize < maxCapture) {
+          const slice = buffer.slice(0, maxCapture - stderrSize);
+          stderrChunks.push(slice);
+          stderrSize += slice.length;
+        }
       });
     }
 
@@ -54,6 +74,9 @@ function spawnAsync(command, args, options = {}) {
     });
 
     child.on('close', (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf8');
+
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {

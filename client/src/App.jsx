@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import './App.css';
 
 const API_BASE = 'http://localhost:4000';
@@ -20,18 +20,61 @@ export default function App() {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [videoType, setVideoType] = useState('desktop');
   const [isGenerating, setIsGenerating] = useState(false);
+  const imageInputRef = useRef(null);
+  const audioInputRef = useRef(null);
 
   const handleImageChange = (event) => {
     setDownloadUrl('');
     setError('');
     const selected = Array.from(event.target.files || []);
-    setImages(selected);
+
+    if (!selected.length) {
+      return;
+    }
+
+    setImages((currentImages) => {
+      const merged = [...currentImages, ...selected];
+      const unique = [];
+      const seen = new Set();
+
+      for (const file of merged) {
+        const key = `${file.name}-${file.size}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(file);
+        }
+      }
+
+      return unique;
+    });
+
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
   };
 
   const handleAudioChange = (event) => {
     setDownloadUrl('');
     setError('');
     setAudio(event.target.files?.[0] || null);
+  };
+
+  const clearImages = () => {
+    setImages([]);
+    setDownloadUrl('');
+    setError('');
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+  };
+
+  const clearAudio = () => {
+    setAudio(null);
+    setDownloadUrl('');
+    setError('');
+    if (audioInputRef.current) {
+      audioInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -95,7 +138,14 @@ export default function App() {
         <form onSubmit={handleSubmit} className="upload-form">
           <label className="field-label">
             Select images (ordered):
-            <input type="file" accept="image/*" multiple onChange={handleImageChange} disabled={isGenerating} />
+            <div className="input-row">
+              <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} disabled={isGenerating} />
+              {images.length > 0 && (
+                <button type="button" className="secondary-button" onClick={clearImages} disabled={isGenerating}>
+                  Clear images
+                </button>
+              )}
+            </div>
           </label>
 
           {images.length > 0 && (
@@ -113,7 +163,14 @@ export default function App() {
 
           <label className="field-label">
             Select audio file (MP3):
-            <input type="file" accept="audio/mpeg" onChange={handleAudioChange} disabled={isGenerating} />
+            <div className="input-row">
+              <input ref={audioInputRef} type="file" accept="audio/mpeg" onChange={handleAudioChange} disabled={isGenerating} />
+              {audio && (
+                <button type="button" className="secondary-button" onClick={clearAudio} disabled={isGenerating}>
+                  Clear audio
+                </button>
+              )}
+            </div>
           </label>
 
           {audio && (

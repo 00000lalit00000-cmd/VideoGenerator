@@ -49,8 +49,36 @@ header p {
   color: #f8fbff;
 }
 
+.input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .field-label input[type='file'] {
   padding: 0.75rem;
+  flex: 1 1 280px;
+}
+
+.secondary-button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  padding: 0.95rem 1.2rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.secondary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .primary-button:disabled,
