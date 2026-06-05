@@ -1,0 +1,9 @@
+node_modules
+client/node_modules
+server/uploads
+server/output
+dist
+.vite
+.DS_Store
+npm-debug.log
+.env
