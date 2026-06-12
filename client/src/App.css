@@ -27,6 +27,35 @@ header p {
   max-width: 32rem;
 }
 
+.tab-navigation {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  border: none;
+  color: #a0aef7;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  margin-bottom: -2px;
+}
+
+.tab-button:hover {
+  color: #d3d9ff;
+}
+
+.tab-button.active {
+  color: #93c5fd;
+  border-bottom-color: #93c5fd;
+}
+
 .upload-form {
   display: grid;
   gap: 1.25rem;

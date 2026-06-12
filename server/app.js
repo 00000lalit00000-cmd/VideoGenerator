@@ -1,9 +1,11 @@
 const path = require('path');
 const fs = require('fs/promises');
 const fsSync = require('fs');
+const os = require('os');
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const gTTS = require('gtts');
 const { spawnAsync, resolveExecutable, formatSubtitlePath, buildSubtitles } = require('./utils/ffmpeg');
 
 const app = express();
@@ -65,6 +67,172 @@ async function getAudioDuration(audioPath) {
     }
 
     throw error;
+  }
+}
+
+function getWindowsVoiceName(gender) {
+  const voices = {
+    male: 'Microsoft David Desktop',
+    female: 'Microsoft Zira Desktop'
+  };
+  const key = String(gender || 'female').toLowerCase();
+  return voices[key] || voices.female;
+}
+
+function splitTextIntoChunks(text, maxLength = 1000) {
+  const normalized = String(text).replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const sentences = normalized.split(/(?<=[.!?।])\s+/);
+  const chunks = [];
+  let current = '';
+
+  for (const sentence of sentences) {
+    if (sentence.length > maxLength) {
+      const words = sentence.split(' ');
+      let piece = '';
+      for (const word of words) {
+        if ((piece + ' ' + word).trim().length > maxLength) {
+          if (piece) {
+            chunks.push(piece.trim());
+          }
+          piece = word;
+        } else {
+          piece = `${piece} ${word}`.trim();
+        }
+      }
+      if (piece) {
+        chunks.push(piece.trim());
+      }
+      continue;
+    }
+
+    if ((current + ' ' + sentence).trim().length > maxLength) {
+      if (current) {
+        chunks.push(current.trim());
+      }
+      current = sentence;
+    } else {
+      current = `${current} ${sentence}`.trim();
+    }
+  }
+
+  if (current) {
+    chunks.push(current.trim());
+  }
+
+  return chunks;
+}
+
+async function saveGTTSAudioChunk(text, lang, outPath) {
+  return new Promise((resolve, reject) => {
+    const speech = new gTTS(text, lang);
+    speech.save(outPath, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+async function generateGTTSAudio(text, lang, outputPath) {
+  const chunks = splitTextIntoChunks(text, 100);
+  if (!chunks.length) {
+    throw new Error('No text provided for TTS generation.');
+  }
+
+  const chunkFiles = [];
+  const baseTimestamp = Date.now();
+  const listFile = path.join(outputDir, `tts-list-${baseTimestamp}.txt`);
+
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunkPath = path.join(outputDir, `tts-${baseTimestamp}-${index}.mp3`);
+      await saveGTTSAudioChunk(chunks[index], lang, chunkPath);
+      chunkFiles.push(chunkPath);
+    }
+
+    const listContent = chunkFiles.map((filePath) => `file '${filePath.replace(/'/g, "''")}'`).join('\n');
+    await fs.writeFile(listFile, listContent, 'utf8');
+
+    await spawnAsync(resolveExecutable('ffmpeg'), [
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listFile,
+      '-c', 'copy',
+      outputPath
+    ]);
+  } finally {
+    await cleanupFiles([...chunkFiles, listFile]);
+  }
+}
+
+async function mergeWavFiles(wavFiles, mergedWav) {
+  const listFile = path.join(outputDir, `tts-list-${Date.now()}.txt`);
+  const listContent = wavFiles.map((wavPath) => `file '${wavPath.replace(/'/g, "''")}'`).join('\n');
+  await fs.writeFile(listFile, listContent, 'utf8');
+
+  try {
+    await spawnAsync(resolveExecutable('ffmpeg'), [
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listFile,
+      '-c', 'copy',
+      mergedWav
+    ]);
+  } finally {
+    await cleanupFiles([listFile]);
+  }
+}
+
+async function generateWindowsSpeechAudio(text, voice, outputPath) {
+  const chunks = splitTextIntoChunks(text, 1200);
+  const chunkWavs = [];
+  const tempFiles = [];
+  const baseTimestamp = Date.now();
+  const mergedWav = outputPath.replace(/\.mp3$/i, `-${baseTimestamp}-merged.wav`);
+
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      const chunkTextFile = path.join(outputDir, `tts-${baseTimestamp}-${index}.txt`);
+      const chunkWavPath = outputPath.replace(/\.mp3$/i, `-${baseTimestamp}-chunk-${index}.wav`);
+      const chunkScriptFile = path.join(outputDir, `tts-script-${baseTimestamp}-${index}.ps1`);
+
+      await fs.writeFile(chunkTextFile, chunk, 'utf8');
+      tempFiles.push(chunkTextFile, chunkScriptFile, chunkWavPath);
+
+      const escapedWavPath = chunkWavPath.replace(/'/g, "''");
+      const escapedTextPath = chunkTextFile.replace(/'/g, "''");
+      const script = `Add-Type -AssemblyName System.Speech\n` +
+        `$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer\n` +
+        `$synth.SelectVoice('${voice}')\n` +
+        `$synth.SetOutputToWaveFile('${escapedWavPath}')\n` +
+        `$text = Get-Content -Path '${escapedTextPath}' -Raw -Encoding UTF8\n` +
+        `$synth.Speak($text)`;
+
+      await fs.writeFile(chunkScriptFile, script, 'utf8');
+      await spawnAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', chunkScriptFile]);
+      chunkWavs.push(chunkWavPath);
+    }
+
+    console.log('generateWindowsSpeechAudio: merging wavs ->', chunkWavs.length, 'chunks, mergedWav=', mergedWav);
+    await mergeWavFiles(chunkWavs, mergedWav);
+    await spawnAsync(resolveExecutable('ffmpeg'), [
+      '-y',
+      '-i', mergedWav,
+      '-codec:a', 'libmp3lame',
+      '-b:a', '192k',
+      outputPath
+    ]);
+  } finally {
+    const toCleanup = [...tempFiles, ...chunkWavs];
+    if (typeof mergedWav !== 'undefined') toCleanup.push(mergedWav);
+    console.log('generateWindowsSpeechAudio: cleanup files count=', toCleanup.length);
+    await cleanupFiles(toCleanup);
   }
 }
 
@@ -184,6 +352,60 @@ if (fsSync.existsSync(clientDist)) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// Audio generation route
+app.post('/api/generate-audio', async (req, res) => {
+  try {
+    const { text, language, gender } = req.body;
+
+    console.log(`Received audio request: text="${typeof text}", language="${language}", gender="${gender}"`);
+
+    if (!text || (typeof text === 'string' && !text.trim())) {
+      return res.status(400).json({ error: 'Please provide text to convert.' });
+    }
+
+    if (!language) {
+      return res.status(400).json({ error: 'Please select a language.' });
+    }
+
+    console.log(`Generating audio: text="${String(text).substring(0, 50)}...", language=${language}, gender=${gender}`);
+
+    // Map language codes for fallback TTS
+    const languageMap = {
+      'hi': 'hi',        // Hindi
+      'en-IN': 'en',     // Indian English
+      'en-US': 'en',     // US English
+      'mr': 'mr'         // Marathi
+    };
+
+    const mappedLang = String(languageMap[language] || language).trim();
+    const textString = String(text).trim();
+
+    console.log(`Mapped language: "${mappedLang}", text length: ${textString.length}`);
+
+    // Save audio file
+    const audioFileName = `audio-${Date.now()}.mp3`;
+    const audioPath = path.join(outputDir, audioFileName);
+
+    const useWindowsNativeVoice = process.platform === 'win32' && ['en-IN', 'en-US'].includes(language);
+
+    if (useWindowsNativeVoice) {
+      const voiceName = getWindowsVoiceName(gender);
+      console.log(`Using Windows voice: ${voiceName}`);
+      await generateWindowsSpeechAudio(textString, voiceName, audioPath);
+    } else {
+      console.log(`Using gTTS for language: ${mappedLang}`);
+      await generateGTTSAudio(textString, mappedLang, audioPath);
+    }
+
+    console.log(`Audio generated successfully: ${audioFileName}`);
+
+    return res.json({ downloadUrl: `/download/${audioFileName}` });
+  } catch (error) {
+    console.error('Audio generation error:', error);
+    return res.status(500).json({ error: error.message || 'Audio generation failed.' });
+  }
+});
 
 app.post('/api/render', async (req, res) => {
   const upload = createUploadHandler();
